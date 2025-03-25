@@ -31,16 +31,27 @@ const DeviceList: React.FC = () => {
 
     const loadDevices = () => {
         setLoading(true);
-        dispatch(fetchDevices({
+
+        // 打印当前请求参数以便调试
+        const requestParams = {
             page: pagination.current,
             limit: pagination.pageSize,
             filter: {
                 ...(searchText && { name: searchText }),
                 ...(statusFilter && { status: statusFilter })
             }
-        })).then(() => {
-            setLoading(false);
-        });
+        };
+        console.log('设备列表请求参数:', requestParams);
+
+        dispatch(fetchDevices(requestParams))
+            .then((result) => {
+                console.log('设备列表请求结果:', result);
+                setLoading(false);
+            })
+            .catch((error) => {
+                console.error('设备列表请求失败:', error);
+                setLoading(false);
+            });
     };
 
     // 处理搜索
@@ -194,6 +205,7 @@ const DeviceList: React.FC = () => {
                 }}
                 loading={loading || status === 'loading'}
                 onChange={handleTableChange}
+                locale={{ emptyText: '暂无设备数据，请添加新设备' }}
             />
 
             <Modal

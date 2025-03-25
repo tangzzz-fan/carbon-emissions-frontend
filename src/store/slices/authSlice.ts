@@ -14,8 +14,8 @@ interface AuthState {
 }
 
 const initialState: AuthState = {
-    user: null,
-    token: localStorage.getItem('token'),
+    user: authService.getStoredUser(),
+    token: authService.getToken(),
     status: 'idle',
     error: null
 };
@@ -25,7 +25,6 @@ export const login = createAsyncThunk(
     async ({ username, password }: { username: string; password: string }, { rejectWithValue }) => {
         try {
             const response = await authService.login(username, password);
-            localStorage.setItem('token', response.data.token);
             return response.data;
         } catch (error: any) {
             return rejectWithValue(error.response?.data?.message || '登录失败');
@@ -49,9 +48,8 @@ export const logout = createAsyncThunk(
     'auth/logout',
     async (_, { rejectWithValue }) => {
         try {
-            await authService.logout();
-            localStorage.removeItem('token');
-            return null;
+            const response = await authService.logout();
+            return response.data;
         } catch (error: any) {
             return rejectWithValue(error.response?.data?.message || '退出登录失败');
         }
@@ -75,7 +73,7 @@ const authSlice = createSlice({
             })
             .addCase(login.fulfilled, (state, action) => {
                 state.status = 'succeeded';
-                state.token = action.payload.token;
+                state.token = action.payload.access_token;
                 state.user = action.payload.user;
             })
             .addCase(login.rejected, (state, action) => {

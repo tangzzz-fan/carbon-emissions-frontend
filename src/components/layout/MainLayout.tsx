@@ -12,6 +12,9 @@ import {
     LogoutOutlined
 } from '@ant-design/icons';
 import styled from 'styled-components';
+import { useDispatch } from 'react-redux';
+import { logout } from '../../store/slices/authSlice';
+import { useAppDispatch } from '../../hooks/reduxHooks';
 
 const { Header, Sider, Content } = Layout;
 
@@ -28,6 +31,7 @@ const Logo = styled.div`
 
 const MainLayout: React.FC = () => {
     const [collapsed, setCollapsed] = useState(false);
+    const dispatch = useAppDispatch();
     const navigate = useNavigate();
 
     const {
@@ -38,9 +42,13 @@ const MainLayout: React.FC = () => {
         navigate(key);
     };
 
-    const handleLogout = () => {
-        localStorage.removeItem('token');
-        navigate('/login');
+    const handleLogout = async () => {
+        try {
+            await dispatch(logout());
+            navigate('/login');
+        } catch (error) {
+            console.error('退出登录失败:', error);
+        }
     };
 
     return (

@@ -1,17 +1,18 @@
 import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Table, Card, Button, Input, Modal, Form, Select, message, Tag, Space } from 'antd';
 import { PlusOutlined, SearchOutlined, ExclamationCircleOutlined } from '@ant-design/icons';
 import api from '../../../services/api';
+import { canEdit } from '../../../services/auth.service';
 
 const { Option } = Select;
-const { confirm } = Modal;
 
 interface User {
+    isActive: boolean;
     id: number;
     username: string;
     email: string;
     role: string;
-    status: string;
     createdAt: string;
     lastLogin: string;
 }
@@ -21,10 +22,11 @@ interface UserFormValues {
     email: string;
     password?: string;
     role: string;
-    status: string;
+    isActive: boolean;
 }
 
 const UserList: React.FC = () => {
+    const navigate = useNavigate();
     const [users, setUsers] = useState<User[]>([]);
     const [loading, setLoading] = useState(false);
     const [pagination, setPagination] = useState({ current: 1, pageSize: 10, total: 0 });
@@ -34,6 +36,14 @@ const UserList: React.FC = () => {
     const [currentUser, setCurrentUser] = useState<User | null>(null);
 
     const [form] = Form.useForm();
+
+    // 组件挂载时检查管理员权限
+    useEffect(() => {
+        if (!canEdit()) {
+            message.error('您没有权限访问此页面');
+            navigate('/dashboard');
+        }
+    }, [navigate]);
 
     // 获取用户列表
     useEffect(() => {
@@ -89,7 +99,7 @@ const UserList: React.FC = () => {
                 username: user.username,
                 email: user.email,
                 role: user.role,
-                status: user.status
+                isActive: user.isActive
             });
         } else {
             setIsEditing(false);
@@ -102,25 +112,35 @@ const UserList: React.FC = () => {
     // 提交表单
     const handleSubmit = async (values: UserFormValues) => {
         try {
-            if (isEditing && currentUser) {
-                // 编辑用户
-                await api.put(`/users/${currentUser.id}`, values);
+            let submitData = { ...values };
+
+            if (isEditing) {
+                // 如果是编辑模式且没有输入密码，删除密码字段
+                if (!values.password || values.password.trim() === '') {
+                    delete submitData.password;
+                }
+
+                await api.put(`/users/${currentUser!.id}`, submitData);
                 message.success('用户更新成功');
             } else {
-                // 添加用户
-                await api.post('/users', values);
+                await api.post('/users', submitData);
                 message.success('用户添加成功');
             }
             setIsModalVisible(false);
             fetchUsers();
-        } catch (error) {
-            message.error(isEditing ? '用户更新失败' : '用户添加失败');
+        } catch (error: any) {
+            const errorMsg = error.response?.data?.message || (isEditing ? '用户更新失败' : '用户添加失败');
+            message.error(errorMsg);
+            console.error('提交失败:', errorMsg, error);
         }
     };
 
-    // 删除用户
+    // 删除用户 - 使用Modal.confirm直接调用
     const handleDelete = (id: number) => {
-        confirm({
+        console.log('删除按钮被点击, 用户ID:', id);
+
+        // 直接使用Modal.confirm而非解构的confirm
+        Modal.confirm({
             title: '确认删除此用户?',
             icon: <ExclamationCircleOutlined />,
             content: '删除后将无法恢复，是否继续？',
@@ -129,13 +149,22 @@ const UserList: React.FC = () => {
             cancelText: '取消',
             onOk: async () => {
                 try {
-                    await api.delete(`/users/${id}`);
+                    console.log(`开始删除用户，ID: ${id}`);
+                    const response = await api.delete(`/users/${id}`);
+                    console.log('删除用户响应:', response.data);
                     message.success('用户删除成功');
                     fetchUsers();
-                } catch (error) {
-                    message.error('用户删除失败');
+                } catch (error: any) {
+                    console.error('删除用户失败:', error);
+                    const errorMsg = error.response?.data?.message || '用户删除失败';
+                    message.error(errorMsg);
+                    console.error('错误详情:', error.response?.data);
                 }
-            }
+            },
+            // 添加onCancel回调以确保正常工作
+            onCancel() {
+                console.log('取消删除用户');
+            },
         });
     };
 
@@ -178,10 +207,10 @@ const UserList: React.FC = () => {
         },
         {
             title: '状态',
-            dataIndex: 'status',
-            key: 'status',
-            render: (status: string) => {
-                return status === 'active' ?
+            dataIndex: 'isActive',
+            key: 'isActive',
+            render: (isActive: boolean) => {
+                return isActive ?
                     <Tag color="green">活跃</Tag> :
                     <Tag color="volcano">禁用</Tag>;
             }
@@ -205,7 +234,15 @@ const UserList: React.FC = () => {
                     <Button type="link" onClick={() => showModal(record)}>
                         编辑
                     </Button>
-                    <Button type="link" danger onClick={() => handleDelete(record.id)}>
+                    <Button
+                        type="link"
+                        danger
+                        onClick={(e) => {
+                            e.stopPropagation(); // 防止事件冒泡
+                            console.log('删除按钮点击，记录:', record.id);
+                            handleDelete(record.id);
+                        }}
+                    >
                         删除
                     </Button>
                 </Space>
@@ -307,13 +344,13 @@ const UserList: React.FC = () => {
                     </Form.Item>
 
                     <Form.Item
-                        name="status"
+                        name="isActive"
                         label="状态"
-                        initialValue="active"
+                        initialValue={true}
                     >
                         <Select>
-                            <Option value="active">活跃</Option>
-                            <Option value="inactive">禁用</Option>
+                            <Option value={true}>活跃</Option>
+                            <Option value={false}>禁用</Option>
                         </Select>
                     </Form.Item>
 

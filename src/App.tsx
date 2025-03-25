@@ -27,7 +27,7 @@ const App: React.FC = () => {
                     {/* 公共路由 */}
                     <Route path="/login" element={<LoginForm />} />
 
-                    {/* 受保护的路由 */}
+                    {/* 受保护的普通路由 */}
                     <Route element={<PrivateRoute />}>
                         <Route element={<MainLayout />}>
                             <Route path="/dashboard" element={<Dashboard />} />
@@ -36,6 +36,12 @@ const App: React.FC = () => {
                             <Route path="/emissions" element={<EmissionList />} />
                             <Route path="/emissions/report" element={<EmissionReport />} />
                             <Route path="/predictions" element={<PredictionAnalysis />} />
+                        </Route>
+                    </Route>
+
+                    {/* 需要管理员权限的路由 */}
+                    <Route element={<PrivateRoute requiresAdmin={true} />}>
+                        <Route element={<MainLayout />}>
                             <Route path="/users" element={<UserList />} />
                         </Route>
                     </Route>

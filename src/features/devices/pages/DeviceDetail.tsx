@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useDispatch, useSelector } from 'react-redux';
+import { useSelector } from 'react-redux';
+import { useAppDispatch } from '../../../hooks/reduxHooks';
 import {
     Card,
     Row,
@@ -44,7 +45,7 @@ interface DeviceData {
 const DeviceDetail: React.FC = () => {
     const { id } = useParams<{ id: string }>();
     const navigate = useNavigate();
-    const dispatch = useDispatch();
+    const dispatch = useAppDispatch();
     const deviceId = Number(id);
 
     const device = useSelector(selectSelectedDevice);
