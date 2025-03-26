@@ -23,29 +23,41 @@ const DeviceForm: React.FC<DeviceFormProps> = ({ initialValues, onSuccess, onCan
     // 表单提交处理
     const onFinish = async (values: any) => {
         try {
+            // 基础设备数据
             const deviceData: DeviceFormData = {
                 name: values.name,
                 type: values.type,
                 status: values.status,
                 location: values.location,
-                installationDate: values.installationDate.format('YYYY-MM-DD'),
-                lastCalibrationDate: values.lastCalibrationDate ? values.lastCalibrationDate.format('YYYY-MM-DD') : undefined,
                 manufacturer: values.manufacturer,
                 model: values.model,
                 serialNumber: values.serialNumber,
                 description: values.description
             };
 
+            // 如果是新建设备，添加安装日期
+            if (!isEditing) {
+                deviceData.installationDate = values.installationDate.format('YYYY-MM-DD');
+            }
+
+            // 添加非必填字段（如果有值）
+            if (values.lastCalibrationDate) {
+                deviceData.lastCalibrationDate = values.lastCalibrationDate.format('YYYY-MM-DD');
+            }
+
             if (isEditing && initialValues) {
+                // 更新设备 - 确保不包含installationDate字段
                 await dispatch(updateDevice({ id: initialValues.id, data: deviceData }));
                 message.success('设备更新成功');
             } else {
+                // 创建设备 - 包含所有字段
                 await dispatch(createDevice(deviceData));
                 message.success('设备添加成功');
             }
 
             onSuccess();
         } catch (error) {
+            console.error('设备操作失败:', error);
             message.error(isEditing ? '设备更新失败' : '设备添加失败');
         }
     };

@@ -30,12 +30,18 @@ import {
 import {
     fetchDeviceById,
     deleteDevice,
+    fetchDeviceData,
+    updateDeviceStatus,
     selectSelectedDevice,
     selectDevicesStatus,
-    selectDevicesError
+    selectDevicesError,
+    selectDeviceData,
+    selectDataStatus,
+    selectDataError
 } from '../../../store/slices/deviceSlice';
 import DeviceForm from '../components/DeviceForm';
 import ReactECharts from 'echarts-for-react';
+import * as echarts from 'echarts';
 
 const { TabPane } = Tabs;
 const { confirm } = Modal;
@@ -110,10 +116,13 @@ const DeviceDetail: React.FC = () => {
     const navigate = useNavigate();
     const dispatch = useAppDispatch();
 
-    // 从Redux获取设备信息和状态
+    // 从Redux获取设备信息、状态和图表数据
     const device = useSelector(selectSelectedDevice);
     const status = useSelector(selectDevicesStatus);
     const reduxError = useSelector(selectDevicesError);
+    const deviceDataFromRedux = useSelector(selectDeviceData);
+    const dataStatus = useSelector(selectDataStatus);
+    const dataError = useSelector(selectDataError);
 
     const [isEditModalVisible, setIsEditModalVisible] = useState(false);
     const [deviceData, setDeviceData] = useState<DeviceData[]>([]);
@@ -149,19 +158,7 @@ const DeviceDetail: React.FC = () => {
 
     // 获取设备图表数据
     useEffect(() => {
-        if (id && device) { // 只有当有设备数据时才获取图表数据
-            fetchDeviceData();
-        }
-    }, [id, timeRange, device]);
-
-    const fetchDeviceData = async () => {
-        if (!id) {
-            console.error('设备ID缺失，无法获取图表数据');
-            return;
-        }
-
-        try {
-            setDataLoading(true);
+        if (id && device) {
             const now = new Date();
             let startDate = new Date();
 
@@ -174,39 +171,41 @@ const DeviceDetail: React.FC = () => {
             }
 
             console.log(`正在获取设备图表数据，ID: ${id}, 时间范围: ${timeRange}`);
+            setDataLoading(true);
 
             // 使用模拟数据进行测试
             // 实际环境中，取消注释下面的代码，使用真实API
             /*
-            const response = await deviceService.getDeviceData(id, {
-                startDate: startDate.toISOString(),
-                endDate: now.toISOString(),
-                interval: 'daily'
-            });
-            setDeviceData(response.data.data);
+            dispatch(fetchDeviceData({
+                deviceId: id,
+                params: {
+                    startDate: startDate.toISOString(),
+                    endDate: now.toISOString(),
+                    interval: 'daily'
+                }
+            }));
             */
 
             // 测试用模拟数据 - 在API可用前使用
-            const mockData = Array.from({ length: 7 }, (_, i) => {
+            const mockData = Array.from({ length: timeRange === '7d' ? 7 : timeRange === '30d' ? 30 : 90 }, (_, i) => {
                 const date = new Date(startDate);
                 date.setDate(startDate.getDate() + i);
                 return {
                     date: date.toISOString().split('T')[0],
-                    energyConsumption: Math.random() * 100,
-                    co2Emission: Math.random() * 50,
-                    operationalHours: Math.random() * 24
+                    energyConsumption: Math.round(Math.random() * 100 + 50),  // 50-150 kWh
+                    co2Emission: Math.round(Math.random() * 50 + 20),         // 20-70 kg
+                    operationalHours: Math.round(Math.random() * 16 + 4)       // 4-20 小时
                 };
             });
             setDeviceData(mockData);
-            console.log('设置模拟图表数据:', mockData);
+            console.log('设置模拟图表数据:', mockData.length, '条记录');
 
-        } catch (error: any) {
-            console.error('获取设备图表数据失败:', error);
-            message.error('获取设备运行数据失败');
-        } finally {
-            setDataLoading(false);
+            // 模拟加载时间
+            setTimeout(() => {
+                setDataLoading(false);
+            }, 500);
         }
-    };
+    }, [id, timeRange, device]);
 
     // 删除设备
     const handleDelete = () => {
@@ -243,7 +242,14 @@ const DeviceDetail: React.FC = () => {
     const handleRefresh = () => {
         if (id) {
             dispatch(fetchDeviceById(id));
-            fetchDeviceData();
+            dispatch(fetchDeviceData({
+                deviceId: id,
+                params: {
+                    startDate: new Date().toISOString(),
+                    endDate: new Date().toISOString(),
+                    interval: 'daily'
+                }
+            }));
             message.success('正在刷新设备数据');
         }
     };
@@ -253,112 +259,331 @@ const DeviceDetail: React.FC = () => {
         navigate('/devices');
     };
 
-    // 图表配置 - 碳排放
+    // 添加更新设备状态功能
+    const handleStatusChange = (newStatus: string) => {
+        if (id) {
+            dispatch(updateDeviceStatus({ deviceId: id, status: newStatus }))
+                .then(() => {
+                    message.success(`设备状态已更新为: ${newStatus}`);
+                })
+                .catch((error) => {
+                    message.error(`更新设备状态失败: ${error.message}`);
+                });
+        }
+    };
+
+    // 添加图表配置函数 - 碳排放
     const getEmissionChartOption = () => {
+        // 使用动态生成的deviceData，而不是静态的mockDeviceData
+        const data = deviceData;
+
+        const dates = data.map(item => item.date);
+        const co2Values = data.map(item => item.co2Emission);
+
         return {
             title: {
-                text: '设备碳排放量趋势'
+                text: 'CO2排放量趋势',
+                left: 'center',
+                textStyle: {
+                    fontSize: 16
+                }
             },
             tooltip: {
-                trigger: 'axis'
+                trigger: 'axis',
+                formatter: '{b}<br/>{a}: {c} kg CO₂',
+                backgroundColor: 'rgba(255, 255, 255, 0.9)',
+                borderColor: '#ccc',
+                borderWidth: 1,
+                textStyle: {
+                    color: '#333'
+                }
+            },
+            grid: {
+                left: '3%',
+                right: '4%',
+                bottom: '10%',
+                containLabel: true
             },
             xAxis: {
                 type: 'category',
-                data: deviceData.map(item => item.date)
+                data: dates,
+                axisLabel: {
+                    rotate: 45,
+                    formatter: (value: string) => {
+                        // 格式化日期显示
+                        const date = new Date(value);
+                        return `${date.getMonth() + 1}/${date.getDate()}`;
+                    }
+                },
+                axisTick: {
+                    alignWithLabel: true
+                }
             },
             yAxis: {
                 type: 'value',
-                name: 'kg CO₂'
+                name: 'CO₂排放量 (kg)',
+                nameTextStyle: {
+                    padding: [0, 0, 0, 40]
+                },
+                splitLine: {
+                    lineStyle: {
+                        type: 'dashed'
+                    }
+                }
             },
             series: [
                 {
-                    name: '碳排放量',
-                    type: 'line',
-                    data: deviceData.map(item => item.co2Emission),
-                    markPoint: {
-                        data: [
-                            { type: 'max', name: '最大值' },
-                            { type: 'min', name: '最小值' }
-                        ]
+                    name: 'CO₂排放量',
+                    type: 'bar',
+                    data: co2Values,
+                    itemStyle: {
+                        color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                            { offset: 0, color: '#83bff6' },
+                            { offset: 0.5, color: '#52c41a' },
+                            { offset: 1, color: '#188033' }
+                        ])
                     },
-                    markLine: {
-                        data: [{ type: 'average', name: '平均值' }]
+                    emphasis: {
+                        itemStyle: {
+                            color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                                { offset: 0, color: '#5470c6' },
+                                { offset: 0.7, color: '#91cc75' },
+                                { offset: 1, color: '#52c41a' }
+                            ])
+                        }
+                    },
+                    barWidth: '60%',
+                    label: {
+                        show: false,
+                        position: 'top',
+                        formatter: '{c} kg'
                     }
                 }
-            ]
+            ],
+            toolbox: {
+                feature: {
+                    saveAsImage: {}
+                },
+                right: 20
+            }
         };
     };
 
-    // 图表配置 - 能源消耗
-    const getEnergyChartOption = () => {
+    // 添加图表配置函数 - 能源消耗
+    const getEnergyConsumptionChartOption = () => {
+        // 使用动态生成的deviceData，而不是静态的mockDeviceData
+        const data = deviceData;
+
+        const dates = data.map(item => item.date);
+        const energyValues = data.map(item => item.energyConsumption);
+
         return {
             title: {
-                text: '设备能源消耗趋势'
+                text: '能源消耗趋势',
+                left: 'center',
+                textStyle: {
+                    fontSize: 16
+                }
             },
             tooltip: {
-                trigger: 'axis'
+                trigger: 'axis',
+                formatter: '{b}<br/>{a}: {c} kWh',
+                backgroundColor: 'rgba(255, 255, 255, 0.9)',
+                borderColor: '#ccc',
+                borderWidth: 1,
+                textStyle: {
+                    color: '#333'
+                }
+            },
+            grid: {
+                left: '3%',
+                right: '4%',
+                bottom: '10%',
+                containLabel: true
             },
             xAxis: {
                 type: 'category',
-                data: deviceData.map(item => item.date)
+                data: dates,
+                axisLabel: {
+                    rotate: 45,
+                    formatter: (value: string) => {
+                        // 格式化日期显示
+                        const date = new Date(value);
+                        return `${date.getMonth() + 1}/${date.getDate()}`;
+                    }
+                },
+                axisTick: {
+                    alignWithLabel: true
+                }
             },
             yAxis: {
                 type: 'value',
-                name: 'kWh'
+                name: '能源消耗 (kWh)',
+                nameTextStyle: {
+                    padding: [0, 0, 0, 40]
+                },
+                splitLine: {
+                    lineStyle: {
+                        type: 'dashed'
+                    }
+                }
             },
             series: [
                 {
                     name: '能源消耗',
-                    type: 'bar',
-                    data: deviceData.map(item => item.energyConsumption),
+                    type: 'line',
+                    smooth: true,
+                    data: energyValues,
+                    symbol: 'emptyCircle',
+                    symbolSize: 8,
+                    lineStyle: {
+                        width: 3,
+                        shadowColor: 'rgba(0,0,0,0.3)',
+                        shadowBlur: 10,
+                        shadowOffsetY: 8
+                    },
+                    itemStyle: {
+                        color: '#1890ff',
+                        borderWidth: 2
+                    },
+                    areaStyle: {
+                        color: {
+                            type: 'linear',
+                            x: 0,
+                            y: 0,
+                            x2: 0,
+                            y2: 1,
+                            colorStops: [
+                                { offset: 0, color: 'rgba(24, 144, 255, 0.8)' },
+                                { offset: 0.5, color: 'rgba(24, 144, 255, 0.4)' },
+                                { offset: 1, color: 'rgba(24, 144, 255, 0.1)' }
+                            ]
+                        }
+                    },
                     markPoint: {
                         data: [
                             { type: 'max', name: '最大值' },
                             { type: 'min', name: '最小值' }
                         ]
-                    },
-                    markLine: {
-                        data: [{ type: 'average', name: '平均值' }]
                     }
                 }
-            ]
+            ],
+            toolbox: {
+                feature: {
+                    saveAsImage: {}
+                },
+                right: 20
+            }
         };
     };
 
-    // 图表配置 - 运行时间
+    // 添加图表配置函数 - 运行时间
     const getOperatingHoursChartOption = () => {
+        // 使用动态生成的deviceData，而不是静态的mockDeviceData
+        const data = deviceData;
+
+        const dates = data.map(item => item.date);
+        const hoursValues = data.map(item => item.operationalHours);
+
         return {
             title: {
-                text: '设备运行时间趋势'
+                text: '设备运行时间',
+                left: 'center',
+                textStyle: {
+                    fontSize: 16
+                }
             },
             tooltip: {
-                trigger: 'axis'
+                trigger: 'axis',
+                formatter: '{b}<br/>{a}: {c} 小时',
+                backgroundColor: 'rgba(255, 255, 255, 0.9)',
+                borderColor: '#ccc',
+                borderWidth: 1,
+                textStyle: {
+                    color: '#333'
+                }
+            },
+            grid: {
+                left: '3%',
+                right: '4%',
+                bottom: '10%',
+                containLabel: true
             },
             xAxis: {
                 type: 'category',
-                data: deviceData.map(item => item.date)
+                data: dates,
+                axisLabel: {
+                    rotate: 45,
+                    formatter: (value: string) => {
+                        // 格式化日期显示
+                        const date = new Date(value);
+                        return `${date.getMonth() + 1}/${date.getDate()}`;
+                    }
+                },
+                axisTick: {
+                    alignWithLabel: true
+                }
             },
             yAxis: {
                 type: 'value',
-                name: '小时'
+                name: '运行时间 (小时)',
+                nameTextStyle: {
+                    padding: [0, 0, 0, 40]
+                },
+                splitLine: {
+                    lineStyle: {
+                        type: 'dashed'
+                    }
+                }
             },
             series: [
                 {
                     name: '运行时间',
                     type: 'line',
-                    data: deviceData.map(item => item.operationalHours),
-                    areaStyle: {},
-                    markPoint: {
+                    step: 'middle',
+                    data: hoursValues,
+                    lineStyle: {
+                        width: 3,
+                        color: '#fa8c16'
+                    },
+                    itemStyle: {
+                        color: '#fa8c16',
+                        borderWidth: 2
+                    },
+                    symbol: 'roundRect',
+                    symbolSize: 8,
+                    markArea: {
+                        itemStyle: {
+                            color: 'rgba(250, 140, 22, 0.1)'
+                        },
                         data: [
-                            { type: 'max', name: '最大值' },
-                            { type: 'min', name: '最小值' }
+                            [
+                                { yAxis: 0 },
+                                { yAxis: 8 }  // 0-8小时标记为低运行区域
+                            ]
                         ]
                     },
                     markLine: {
-                        data: [{ type: 'average', name: '平均值' }]
+                        data: [
+                            { type: 'average', name: '平均运行' }
+                        ],
+                        lineStyle: {
+                            color: '#ff4d4f',
+                            type: 'dashed'
+                        },
+                        label: {
+                            position: 'middle',
+                            formatter: '平均: {c} 小时'
+                        }
                     }
                 }
-            ]
+            ],
+            toolbox: {
+                feature: {
+                    saveAsImage: {}
+                },
+                right: 20
+            }
         };
     };
 
@@ -567,7 +792,7 @@ const DeviceDetail: React.FC = () => {
                                     近90天
                                 </Button>
                             </div>
-                            <Button icon={<ReloadOutlined />} onClick={fetchDeviceData}>
+                            <Button icon={<ReloadOutlined />} onClick={handleRefresh}>
                                 刷新数据
                             </Button>
                         </div>
@@ -583,7 +808,7 @@ const DeviceDetail: React.FC = () => {
                                 </TabPane>
                                 <TabPane tab="能源消耗" key="energy">
                                     {deviceData.length > 0 ? (
-                                        <ReactECharts option={getEnergyChartOption()} style={{ height: 400 }} />
+                                        <ReactECharts option={getEnergyConsumptionChartOption()} style={{ height: 400 }} />
                                     ) : (
                                         <Empty description="暂无能源消耗数据" />
                                     )}
@@ -624,4 +849,4 @@ const DeviceDetail: React.FC = () => {
     );
 };
 
-export default DeviceDetail; 
+export default DeviceDetail;
