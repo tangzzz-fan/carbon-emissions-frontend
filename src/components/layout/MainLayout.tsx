@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Layout, Menu, theme, Button } from 'antd';
-import { Outlet, useNavigate } from 'react-router-dom';
+import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import {
     MenuFoldOutlined,
     MenuUnfoldOutlined,
@@ -33,6 +33,15 @@ const MainLayout: React.FC = () => {
     const [collapsed, setCollapsed] = useState(false);
     const dispatch = useAppDispatch();
     const navigate = useNavigate();
+    const location = useLocation();
+
+    // 根据当前路径确定选中的菜单项
+    const [selectedKey, setSelectedKey] = useState(location.pathname);
+
+    // 当路径变化时更新选中项
+    useEffect(() => {
+        setSelectedKey(location.pathname);
+    }, [location.pathname]);
 
     const {
         token: { colorBgContainer, borderRadiusLG },
@@ -58,7 +67,7 @@ const MainLayout: React.FC = () => {
                 <Menu
                     theme="dark"
                     mode="inline"
-                    defaultSelectedKeys={['/dashboard']}
+                    selectedKeys={[selectedKey]}
                     onClick={({ key }) => handleMenuClick(key)}
                     items={[
                         {

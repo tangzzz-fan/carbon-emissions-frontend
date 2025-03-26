@@ -4,6 +4,7 @@ import { useDispatch } from 'react-redux';
 import { createDevice, updateDevice } from '../../../store/slices/deviceSlice';
 import { Device, DeviceFormData } from '../../../types/device';
 import moment from 'moment';
+import { useAppDispatch } from '../../../hooks/reduxHooks';
 
 const { Option } = Select;
 const { TextArea } = Input;
@@ -16,7 +17,7 @@ interface DeviceFormProps {
 
 const DeviceForm: React.FC<DeviceFormProps> = ({ initialValues, onSuccess, onCancel }) => {
     const [form] = Form.useForm();
-    const dispatch = useDispatch();
+    const dispatch = useAppDispatch();
     const isEditing = !!initialValues;
 
     // 表单提交处理
@@ -28,14 +29,14 @@ const DeviceForm: React.FC<DeviceFormProps> = ({ initialValues, onSuccess, onCan
                 status: values.status,
                 location: values.location,
                 installationDate: values.installationDate.format('YYYY-MM-DD'),
-                lastMaintenanceDate: values.lastMaintenanceDate ? values.lastMaintenanceDate.format('YYYY-MM-DD') : undefined,
+                lastCalibrationDate: values.lastCalibrationDate ? values.lastCalibrationDate.format('YYYY-MM-DD') : undefined,
                 manufacturer: values.manufacturer,
                 model: values.model,
                 serialNumber: values.serialNumber,
                 description: values.description
             };
 
-            if (isEditing) {
+            if (isEditing && initialValues) {
                 await dispatch(updateDevice({ id: initialValues.id, data: deviceData }));
                 message.success('设备更新成功');
             } else {
@@ -58,7 +59,7 @@ const DeviceForm: React.FC<DeviceFormProps> = ({ initialValues, onSuccess, onCan
                     ? {
                         ...initialValues,
                         installationDate: initialValues.installationDate ? moment(initialValues.installationDate) : null,
-                        lastMaintenanceDate: initialValues.lastMaintenanceDate ? moment(initialValues.lastMaintenanceDate) : null
+                        lastCalibrationDate: initialValues.lastCalibrationDate ? moment(initialValues.lastCalibrationDate) : null
                     }
                     : {
                         status: 'active'
@@ -84,6 +85,11 @@ const DeviceForm: React.FC<DeviceFormProps> = ({ initialValues, onSuccess, onCan
                     <Option value="heating">加热设备</Option>
                     <Option value="cooling">制冷设备</Option>
                     <Option value="transport">运输设备</Option>
+                    <Option value="GATE">闸机</Option>
+                    <Option value="CAMERA">摄像头</Option>
+                    <Option value="WEIGHT_SCALE">称重设备</Option>
+                    <Option value="SECURITY">安防设备</Option>
+                    <Option value="CHARGING_STATION">充电站</Option>
                     <Option value="other">其他设备</Option>
                 </Select>
             </Form.Item>
@@ -94,8 +100,8 @@ const DeviceForm: React.FC<DeviceFormProps> = ({ initialValues, onSuccess, onCan
                 rules={[{ required: true, message: '请选择设备状态' }]}
             >
                 <Select placeholder="请选择设备状态">
-                    <Option value="active">正常</Option>
-                    <Option value="inactive">离线</Option>
+                    <Option value="active">运行中</Option>
+                    <Option value="inactive">已停用</Option>
                     <Option value="maintenance">维护中</Option>
                 </Select>
             </Form.Item>
@@ -116,7 +122,7 @@ const DeviceForm: React.FC<DeviceFormProps> = ({ initialValues, onSuccess, onCan
                 <DatePicker style={{ width: '100%' }} />
             </Form.Item>
 
-            <Form.Item name="lastMaintenanceDate" label="最后维护日期">
+            <Form.Item name="lastCalibrationDate" label="最后校准日期">
                 <DatePicker style={{ width: '100%' }} />
             </Form.Item>
 

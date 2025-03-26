@@ -2,6 +2,7 @@ import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
 import * as deviceService from '../../services/device.service';
 import { Device, DeviceFormData } from '../../types/device';
 import { RootState } from '../index';
+import api from '../../services/api';
 
 interface DevicesState {
     items: Device[];
@@ -38,12 +39,12 @@ export const fetchDevices = createAsyncThunk(
 
 export const fetchDeviceById = createAsyncThunk(
     'devices/fetchById',
-    async (id: number, { rejectWithValue }) => {
+    async (id: string, { rejectWithValue }) => {
         try {
-            const response = await deviceService.getById(id);
+            const response = await api.get(`/devices/${id}`);
             return response.data;
         } catch (error: any) {
-            return rejectWithValue(error.response?.data || 'Failed to fetch device');
+            return rejectWithValue(error.response?.data?.message || 'Failed to fetch device');
         }
     }
 );
@@ -62,7 +63,7 @@ export const createDevice = createAsyncThunk(
 
 export const updateDevice = createAsyncThunk(
     'devices/update',
-    async ({ id, data }: { id: number; data: Partial<DeviceFormData> }, { rejectWithValue }) => {
+    async ({ id, data }: { id: string; data: Partial<DeviceFormData> }, { rejectWithValue }) => {
         try {
             const response = await deviceService.update(id, data);
             return response.data;
@@ -74,12 +75,12 @@ export const updateDevice = createAsyncThunk(
 
 export const deleteDevice = createAsyncThunk(
     'devices/delete',
-    async (id: number, { rejectWithValue }) => {
+    async (id: string, { rejectWithValue }) => {
         try {
-            await deviceService.remove(id);
+            await api.delete(`/devices/${id}`);
             return id;
         } catch (error: any) {
-            return rejectWithValue(error.response?.data || 'Failed to delete device');
+            return rejectWithValue(error.response?.data?.message || 'Failed to delete device');
         }
     }
 );
@@ -118,13 +119,13 @@ const deviceSlice = createSlice({
             .addCase(fetchDeviceById.pending, (state) => {
                 state.status = 'loading';
             })
-            .addCase(fetchDeviceById.fulfilled, (state, action) => {
+            .addCase(fetchDeviceById.fulfilled, (state, action: PayloadAction<Device>) => {
                 state.status = 'succeeded';
                 state.selectedDevice = action.payload;
             })
             .addCase(fetchDeviceById.rejected, (state, action) => {
                 state.status = 'failed';
-                state.error = action.payload as string;
+                state.error = action.payload as string || 'Failed to fetch device';
             })
 
             // 处理创建设备
@@ -164,11 +165,11 @@ const deviceSlice = createSlice({
             .addCase(deleteDevice.pending, (state) => {
                 state.status = 'loading';
             })
-            .addCase(deleteDevice.fulfilled, (state, action) => {
+            .addCase(deleteDevice.fulfilled, (state, action: PayloadAction<string>) => {
                 state.status = 'succeeded';
                 state.items = state.items.filter(device => device.id !== action.payload);
                 state.total -= 1;
-                if (state.selectedDevice?.id === action.payload) {
+                if (state.selectedDevice && state.selectedDevice.id === action.payload) {
                     state.selectedDevice = null;
                 }
             })
@@ -183,7 +184,7 @@ export const { clearSelectedDevice, setStatus, clearError } = deviceSlice.action
 
 // 选择器
 export const selectAllDevices = (state: RootState) => state.devices.items;
-export const selectDeviceById = (state: RootState, deviceId: number) =>
+export const selectDeviceById = (state: RootState, deviceId: string) =>
     state.devices.items.find(device => device.id === deviceId);
 export const selectDeviceTotal = (state: RootState) => state.devices.total;
 export const selectSelectedDevice = (state: RootState) => state.devices.selectedDevice;

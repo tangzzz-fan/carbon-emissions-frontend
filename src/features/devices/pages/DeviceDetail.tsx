@@ -14,26 +14,34 @@ import {
     Modal,
     message,
     Empty,
-    Statistic
+    Statistic,
+    Space,
+    Divider,
+    Typography,
+    Alert
 } from 'antd';
 import {
     EditOutlined,
     DeleteOutlined,
     ExclamationCircleOutlined,
-    ReloadOutlined
+    ReloadOutlined,
+    ArrowLeftOutlined
 } from '@ant-design/icons';
 import {
     fetchDeviceById,
     deleteDevice,
     selectSelectedDevice,
-    selectDevicesStatus
+    selectDevicesStatus,
+    selectDevicesError
 } from '../../../store/slices/deviceSlice';
 import DeviceForm from '../components/DeviceForm';
 import ReactECharts from 'echarts-for-react';
 import * as deviceService from '../../../services/device.service';
+import { Device } from '../hooks/useDevices';
 
 const { TabPane } = Tabs;
 const { confirm } = Modal;
+const { Title } = Typography;
 
 interface DeviceData {
     date: string;
@@ -42,35 +50,107 @@ interface DeviceData {
     operationalHours: number;
 }
 
+// 设备类型映射
+const deviceTypeMap: Record<string, string> = {
+    truck: '卡车',
+    forklift: '叉车',
+    packaging: '包装设备',
+    lighting: '照明设备',
+    GATE: '闸机',
+    CAMERA: '摄像头',
+    WEIGHT_SCALE: '称重设备',
+    SECURITY: '安防设备',
+    CHARGING_STATION: '充电站',
+    other: '其他'
+};
+
+// 设备状态映射
+const deviceStatusMap: Record<string, string> = {
+    active: '运行中',
+    inactive: '已停用',
+    maintenance: '维护中'
+};
+
+// 能源类型映射
+const energyTypeMap: Record<string, string> = {
+    electricity: '电力',
+    diesel: '柴油',
+    gas: '天然气',
+    solar: '太阳能'
+};
+
+// 获取设备类型对应的标签颜色
+const getTypeColor = (type: string) => {
+    const typeColors: Record<string, string> = {
+        truck: 'blue',
+        forklift: 'cyan',
+        packaging: 'orange',
+        lighting: 'yellow',
+        GATE: 'purple',
+        CAMERA: 'magenta',
+        WEIGHT_SCALE: 'volcano',
+        SECURITY: 'green',
+        CHARGING_STATION: 'red',
+        other: 'default'
+    };
+    return typeColors[type] || 'default';
+};
+
+// 获取设备状态对应的标签颜色
+const getStatusColor = (status: string) => {
+    const statusColors: Record<string, string> = {
+        active: 'green',
+        inactive: 'red',
+        maintenance: 'gold'
+    };
+    return statusColors[status] || 'default';
+};
+
 const DeviceDetail: React.FC = () => {
     const { id } = useParams<{ id: string }>();
     const navigate = useNavigate();
     const dispatch = useAppDispatch();
-    const deviceId = Number(id);
 
+    // 从Redux获取设备信息和状态
     const device = useSelector(selectSelectedDevice);
     const status = useSelector(selectDevicesStatus);
+    const reduxError = useSelector(selectDevicesError);
 
     const [isEditModalVisible, setIsEditModalVisible] = useState(false);
     const [deviceData, setDeviceData] = useState<DeviceData[]>([]);
     const [dataLoading, setDataLoading] = useState(false);
     const [timeRange, setTimeRange] = useState('7d');
+    const [localLoading, setLocalLoading] = useState(false);
+    const [localError, setLocalError] = useState<string | null>(null);
 
-    // 获取设备详情
+    console.log('当前设备ID:', id);
+    console.log('Redux设备状态:', status);
+    console.log('Redux设备数据:', device);
+    console.log('Redux错误信息:', reduxError);
+
+    // 获取设备详情 - 只使用Redux方式，移除本地fetchDeviceDetail
     useEffect(() => {
-        if (deviceId) {
-            dispatch(fetchDeviceById(deviceId));
+        if (id) {
+            console.log(`正在通过Redux获取设备详情，ID: ${id}`);
+            dispatch(fetchDeviceById(id));
+        } else {
+            console.error('设备ID缺失');
         }
-    }, [dispatch, deviceId]);
+    }, [dispatch, id]);
 
-    // 获取设备数据
+    // 获取设备图表数据
     useEffect(() => {
-        if (deviceId) {
+        if (id && device) { // 只有当有设备数据时才获取图表数据
             fetchDeviceData();
         }
-    }, [deviceId, timeRange]);
+    }, [id, timeRange, device]);
 
     const fetchDeviceData = async () => {
+        if (!id) {
+            console.error('设备ID缺失，无法获取图表数据');
+            return;
+        }
+
         try {
             setDataLoading(true);
             const now = new Date();
@@ -84,15 +164,36 @@ const DeviceDetail: React.FC = () => {
                 startDate.setDate(now.getDate() - 90);
             }
 
-            const response = await deviceService.getDeviceData(deviceId, {
+            console.log(`正在获取设备图表数据，ID: ${id}, 时间范围: ${timeRange}`);
+
+            // 使用模拟数据进行测试
+            // 实际环境中，取消注释下面的代码，使用真实API
+            /*
+            const response = await deviceService.getDeviceData(id, {
                 startDate: startDate.toISOString(),
                 endDate: now.toISOString(),
                 interval: 'daily'
             });
-
             setDeviceData(response.data.data);
-        } catch (error) {
-            message.error('获取设备数据失败');
+            */
+
+            // 测试用模拟数据 - 在API可用前使用
+            const mockData = Array.from({ length: 7 }, (_, i) => {
+                const date = new Date(startDate);
+                date.setDate(startDate.getDate() + i);
+                return {
+                    date: date.toISOString().split('T')[0],
+                    energyConsumption: Math.random() * 100,
+                    co2Emission: Math.random() * 50,
+                    operationalHours: Math.random() * 24
+                };
+            });
+            setDeviceData(mockData);
+            console.log('设置模拟图表数据:', mockData);
+
+        } catch (error: any) {
+            console.error('获取设备图表数据失败:', error);
+            message.error('获取设备运行数据失败');
         } finally {
             setDataLoading(false);
         }
@@ -100,6 +201,11 @@ const DeviceDetail: React.FC = () => {
 
     // 删除设备
     const handleDelete = () => {
+        if (!id) {
+            message.error('设备ID无效');
+            return;
+        }
+
         confirm({
             title: '确认删除该设备?',
             icon: <ExclamationCircleOutlined />,
@@ -108,293 +214,382 @@ const DeviceDetail: React.FC = () => {
             okType: 'danger',
             cancelText: '取消',
             onOk() {
-                dispatch(deleteDevice(deviceId)).then(() => {
+                dispatch(deleteDevice(id)).then(() => {
                     message.success('设备删除成功');
                     navigate('/devices');
+                }).catch((error) => {
+                    console.error('删除设备失败:', error);
+                    message.error('删除设备失败');
                 });
             }
         });
     };
 
-    // 设备状态对应的Tag颜色
-    const getStatusTag = (status: string) => {
-        switch (status) {
-            case 'active':
-                return <Tag color="green">正常</Tag>;
-            case 'inactive':
-                return <Tag color="volcano">离线</Tag>;
-            case 'maintenance':
-                return <Tag color="gold">维护中</Tag>;
-            default:
-                return <Tag>未知</Tag>;
+    // 编辑设备
+    const handleEdit = () => {
+        setIsEditModalVisible(true);
+    };
+
+    // 刷新设备数据
+    const handleRefresh = () => {
+        if (id) {
+            dispatch(fetchDeviceById(id));
+            fetchDeviceData();
+            message.success('正在刷新设备数据');
         }
     };
 
-    // 碳排放趋势图表配置
-    const getEmissionChartOption = () => {
-        const dates = deviceData.map(item => item.date);
-        const emissions = deviceData.map(item => item.co2Emission);
+    // 返回设备列表
+    const handleBack = () => {
+        navigate('/devices');
+    };
 
+    // 图表配置 - 碳排放
+    const getEmissionChartOption = () => {
         return {
             title: {
-                text: '碳排放趋势',
-                left: 'center'
+                text: '设备碳排放量趋势'
             },
             tooltip: {
                 trigger: 'axis'
             },
-            grid: {
-                left: '3%',
-                right: '4%',
-                bottom: '3%',
-                containLabel: true
-            },
             xAxis: {
                 type: 'category',
-                data: dates
+                data: deviceData.map(item => item.date)
             },
             yAxis: {
                 type: 'value',
-                name: '碳排放量 (kg)'
+                name: 'kg CO₂'
             },
             series: [
                 {
                     name: '碳排放量',
                     type: 'line',
-                    data: emissions,
-                    smooth: true,
-                    lineStyle: {
-                        width: 3
-                    },
-                    areaStyle: {
-                        opacity: 0.2
-                    },
+                    data: deviceData.map(item => item.co2Emission),
                     markPoint: {
                         data: [
                             { type: 'max', name: '最大值' },
                             { type: 'min', name: '最小值' }
                         ]
+                    },
+                    markLine: {
+                        data: [{ type: 'average', name: '平均值' }]
                     }
                 }
             ]
         };
     };
 
-    // 能耗图表配置
+    // 图表配置 - 能源消耗
     const getEnergyChartOption = () => {
-        const dates = deviceData.map(item => item.date);
-        const energy = deviceData.map(item => item.energyConsumption);
-
         return {
             title: {
-                text: '能源消耗趋势',
-                left: 'center'
+                text: '设备能源消耗趋势'
             },
             tooltip: {
                 trigger: 'axis'
             },
-            grid: {
-                left: '3%',
-                right: '4%',
-                bottom: '3%',
-                containLabel: true
-            },
             xAxis: {
                 type: 'category',
-                data: dates
+                data: deviceData.map(item => item.date)
             },
             yAxis: {
                 type: 'value',
-                name: '能源消耗 (kWh)'
+                name: 'kWh'
             },
             series: [
                 {
                     name: '能源消耗',
                     type: 'bar',
-                    data: energy,
-                    itemStyle: {
-                        color: '#5470c6'
+                    data: deviceData.map(item => item.energyConsumption),
+                    markPoint: {
+                        data: [
+                            { type: 'max', name: '最大值' },
+                            { type: 'min', name: '最小值' }
+                        ]
+                    },
+                    markLine: {
+                        data: [{ type: 'average', name: '平均值' }]
                     }
                 }
             ]
         };
     };
 
-    // 运行时间图表配置
+    // 图表配置 - 运行时间
     const getOperatingHoursChartOption = () => {
-        const dates = deviceData.map(item => item.date);
-        const hours = deviceData.map(item => item.operationalHours);
-
         return {
             title: {
-                text: '运行时间趋势',
-                left: 'center'
+                text: '设备运行时间趋势'
             },
             tooltip: {
                 trigger: 'axis'
             },
-            grid: {
-                left: '3%',
-                right: '4%',
-                bottom: '3%',
-                containLabel: true
-            },
             xAxis: {
                 type: 'category',
-                data: dates
+                data: deviceData.map(item => item.date)
             },
             yAxis: {
                 type: 'value',
-                name: '运行时间 (小时)'
+                name: '小时'
             },
             series: [
                 {
                     name: '运行时间',
                     type: 'line',
-                    data: hours,
-                    smooth: true
+                    data: deviceData.map(item => item.operationalHours),
+                    areaStyle: {},
+                    markPoint: {
+                        data: [
+                            { type: 'max', name: '最大值' },
+                            { type: 'min', name: '最小值' }
+                        ]
+                    },
+                    markLine: {
+                        data: [{ type: 'average', name: '平均值' }]
+                    }
                 }
             ]
         };
     };
 
+    // 加载中状态
     if (status === 'loading') {
         return (
-            <div style={{ display: 'flex', justifyContent: 'center', padding: '50px' }}>
-                <Spin size="large" tip="加载中..." />
-            </div>
+            <Card>
+                <div style={{ textAlign: 'center', padding: '50px 0' }}>
+                    <Spin size="large" />
+                    <p style={{ marginTop: 16 }}>正在加载设备详情...</p>
+                </div>
+            </Card>
         );
     }
 
-    if (!device) {
-        return <Empty description="没有找到设备信息" />;
+    // 错误状态
+    if (status === 'failed' || reduxError) {
+        return (
+            <Card>
+                <div style={{ padding: '20px 0' }}>
+                    <Alert
+                        message="获取设备详情失败"
+                        description={reduxError || `无法加载ID为 ${id} 的设备信息`}
+                        type="error"
+                        showIcon
+                        action={
+                            <Space>
+                                <Button size="small" onClick={handleRefresh}>
+                                    重试
+                                </Button>
+                                <Button size="small" type="primary" onClick={handleBack}>
+                                    返回列表
+                                </Button>
+                            </Space>
+                        }
+                    />
+                </div>
+            </Card>
+        );
     }
 
-    return (
-        <div>
-            <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between' }}>
-                <h2>{device.name} - 设备详情</h2>
-                <div>
-                    <Button
-                        type="primary"
-                        icon={<EditOutlined />}
-                        style={{ marginRight: 8 }}
-                        onClick={() => setIsEditModalVisible(true)}
-                    >
-                        编辑
-                    </Button>
-                    <Button danger icon={<DeleteOutlined />} onClick={handleDelete}>
-                        删除
-                    </Button>
-                </div>
-            </div>
-
+    // 空数据状态
+    if (!device) {
+        return (
             <Card>
-                <Descriptions title="基本信息" bordered column={{ xxl: 4, xl: 3, lg: 3, md: 2, sm: 1, xs: 1 }}>
-                    <Descriptions.Item label="设备名称">{device.name}</Descriptions.Item>
-                    <Descriptions.Item label="设备类型">{device.type}</Descriptions.Item>
-                    <Descriptions.Item label="状态">{getStatusTag(device.status)}</Descriptions.Item>
-                    <Descriptions.Item label="位置">{device.location}</Descriptions.Item>
-                    <Descriptions.Item label="制造商">{device.manufacturer}</Descriptions.Item>
-                    <Descriptions.Item label="型号">{device.model}</Descriptions.Item>
-                    <Descriptions.Item label="序列号">{device.serialNumber}</Descriptions.Item>
-                    <Descriptions.Item label="安装日期">{device.installationDate}</Descriptions.Item>
-                    <Descriptions.Item label="最后维护日期">
-                        {device.lastMaintenanceDate || '-'}
-                    </Descriptions.Item>
-                    <Descriptions.Item label="描述" span={3}>
-                        {device.description || '-'}
-                    </Descriptions.Item>
-                </Descriptions>
-            </Card>
-
-            <Card style={{ marginTop: 16 }}>
-                <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between' }}>
-                    <div>
-                        <Button
-                            type={timeRange === '7d' ? 'primary' : 'default'}
-                            onClick={() => setTimeRange('7d')}
-                            style={{ marginRight: 8 }}
-                        >
-                            近7天
-                        </Button>
-                        <Button
-                            type={timeRange === '30d' ? 'primary' : 'default'}
-                            onClick={() => setTimeRange('30d')}
-                            style={{ marginRight: 8 }}
-                        >
-                            近30天
-                        </Button>
-                        <Button
-                            type={timeRange === '90d' ? 'primary' : 'default'}
-                            onClick={() => setTimeRange('90d')}
-                        >
-                            近90天
+                <div style={{ textAlign: 'center', padding: '50px 0' }}>
+                    <Empty description={
+                        <span>没有找到设备信息 {id ? `(ID: ${id})` : ''}</span>
+                    } />
+                    <div style={{ marginTop: 20 }}>
+                        <Button type="primary" onClick={handleBack}>
+                            返回设备列表
                         </Button>
                     </div>
-                    <Button icon={<ReloadOutlined />} onClick={fetchDeviceData}>
-                        刷新数据
-                    </Button>
                 </div>
+            </Card>
+        );
+    }
 
-                <Row gutter={16} style={{ marginBottom: 24 }}>
-                    <Col xs={24} sm={8}>
-                        <Card>
-                            <Statistic
-                                title="平均碳排放量"
-                                value={deviceData.length > 0 ? deviceData.reduce((sum, item) => sum + item.co2Emission, 0) / deviceData.length : 0}
-                                precision={2}
-                                suffix="kg/天"
-                            />
-                        </Card>
-                    </Col>
-                    <Col xs={24} sm={8}>
-                        <Card>
-                            <Statistic
-                                title="平均能源消耗"
-                                value={deviceData.length > 0 ? deviceData.reduce((sum, item) => sum + item.energyConsumption, 0) / deviceData.length : 0}
-                                precision={2}
-                                suffix="kWh/天"
-                            />
-                        </Card>
-                    </Col>
-                    <Col xs={24} sm={8}>
-                        <Card>
-                            <Statistic
-                                title="平均运行时间"
-                                value={deviceData.length > 0 ? deviceData.reduce((sum, item) => sum + item.operationalHours, 0) / deviceData.length : 0}
-                                precision={1}
-                                suffix="小时/天"
-                            />
-                        </Card>
-                    </Col>
-                </Row>
+    // 正常渲染设备详情
+    return (
+        <div>
+            <Card
+                title={
+                    <Space>
+                        <Button
+                            type="link"
+                            icon={<ArrowLeftOutlined />}
+                            onClick={handleBack}
+                            style={{ marginLeft: -16 }}
+                        >
+                            返回
+                        </Button>
+                        <Divider type="vertical" />
+                        <Title level={4} style={{ margin: 0 }}>设备详情</Title>
+                    </Space>
+                }
+                extra={
+                    <Space>
+                        <Button
+                            icon={<ReloadOutlined />}
+                            onClick={handleRefresh}
+                        >
+                            刷新
+                        </Button>
+                        <Button
+                            type="primary"
+                            icon={<EditOutlined />}
+                            onClick={handleEdit}
+                        >
+                            编辑
+                        </Button>
+                        <Button
+                            danger
+                            icon={<DeleteOutlined />}
+                            onClick={handleDelete}
+                        >
+                            删除
+                        </Button>
+                    </Space>
+                }
+            >
+                <Card title="基本信息" style={{ marginBottom: 16 }}>
+                    <Descriptions bordered column={{ xxl: 4, xl: 3, lg: 3, md: 3, sm: 2, xs: 1 }}>
+                        <Descriptions.Item label="设备ID">{device.id}</Descriptions.Item>
+                        <Descriptions.Item label="设备名称">{device.name}</Descriptions.Item>
+                        <Descriptions.Item label="设备类型">
+                            <Tag color={getTypeColor(device.type)}>
+                                {deviceTypeMap[device.type] || device.type}
+                            </Tag>
+                        </Descriptions.Item>
+                        <Descriptions.Item label="设备状态">
+                            <Tag color={getStatusColor(device.status)}>
+                                {deviceStatusMap[device.status] || device.status}
+                            </Tag>
+                        </Descriptions.Item>
+                        <Descriptions.Item label="序列号">{device.serialNumber || '-'}</Descriptions.Item>
+                        <Descriptions.Item label="位置">{device.location || '-'}</Descriptions.Item>
+                        <Descriptions.Item label="制造商">{device.manufacturer || '-'}</Descriptions.Item>
+                        <Descriptions.Item label="型号">{device.model || '-'}</Descriptions.Item>
+                        <Descriptions.Item label="激活状态">
+                            <Tag color={device.isActive ? 'green' : 'red'}>
+                                {device.isActive ? '已激活' : '未激活'}
+                            </Tag>
+                        </Descriptions.Item>
+                        <Descriptions.Item label="安装日期">
+                            {device.installationDate ? new Date(device.installationDate).toLocaleDateString() : '-'}
+                        </Descriptions.Item>
+                        <Descriptions.Item label="最后校准日期">
+                            {device.lastCalibrationDate ? new Date(device.lastCalibrationDate).toLocaleDateString() : '-'}
+                        </Descriptions.Item>
+                        <Descriptions.Item label="创建时间">
+                            {device.createdAt ? new Date(device.createdAt).toLocaleString() : '-'}
+                        </Descriptions.Item>
+                        <Descriptions.Item label="更新时间">
+                            {device.updatedAt ? new Date(device.updatedAt).toLocaleString() : '-'}
+                        </Descriptions.Item>
+                        <Descriptions.Item label="描述" span={2}>
+                            {device.description || '-'}
+                        </Descriptions.Item>
+                    </Descriptions>
+                </Card>
 
-                <Spin spinning={dataLoading}>
-                    <Tabs defaultActiveKey="emission">
-                        <TabPane tab="碳排放" key="emission">
-                            {deviceData.length > 0 ? (
-                                <ReactECharts option={getEmissionChartOption()} style={{ height: 400 }} />
-                            ) : (
-                                <Empty description="暂无数据" />
-                            )}
-                        </TabPane>
-                        <TabPane tab="能源消耗" key="energy">
-                            {deviceData.length > 0 ? (
-                                <ReactECharts option={getEnergyChartOption()} style={{ height: 400 }} />
-                            ) : (
-                                <Empty description="暂无数据" />
-                            )}
-                        </TabPane>
-                        <TabPane tab="运行时间" key="hours">
-                            {deviceData.length > 0 ? (
-                                <ReactECharts option={getOperatingHoursChartOption()} style={{ height: 400 }} />
-                            ) : (
-                                <Empty description="暂无数据" />
-                            )}
-                        </TabPane>
-                    </Tabs>
-                </Spin>
+                <Card title="能源与排放信息" style={{ marginBottom: 16 }}>
+                    <Row gutter={16}>
+                        <Col span={6}>
+                            <Card>
+                                <Statistic
+                                    title="能源类型"
+                                    value={device.energyType ? (energyTypeMap[device.energyType] || device.energyType) : '-'}
+                                />
+                            </Card>
+                        </Col>
+                        <Col span={6}>
+                            <Card>
+                                <Statistic
+                                    title="功率(W)"
+                                    value={device.powerRating || 0}
+                                    precision={2}
+                                />
+                            </Card>
+                        </Col>
+                        <Col span={6}>
+                            <Card>
+                                <Statistic
+                                    title="排放因子"
+                                    value={device.emissionFactor || 0}
+                                    precision={2}
+                                    suffix="kg CO₂/kWh"
+                                />
+                            </Card>
+                        </Col>
+                        <Col span={6}>
+                            <Card>
+                                <Statistic
+                                    title="容量"
+                                    value={device.capacity || 0}
+                                    precision={2}
+                                    suffix={device.unit || ''}
+                                />
+                            </Card>
+                        </Col>
+                    </Row>
+
+                    <Card style={{ marginTop: 16 }}>
+                        <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between' }}>
+                            <div>
+                                <Button
+                                    type={timeRange === '7d' ? 'primary' : 'default'}
+                                    onClick={() => setTimeRange('7d')}
+                                    style={{ marginRight: 8 }}
+                                >
+                                    近7天
+                                </Button>
+                                <Button
+                                    type={timeRange === '30d' ? 'primary' : 'default'}
+                                    onClick={() => setTimeRange('30d')}
+                                    style={{ marginRight: 8 }}
+                                >
+                                    近30天
+                                </Button>
+                                <Button
+                                    type={timeRange === '90d' ? 'primary' : 'default'}
+                                    onClick={() => setTimeRange('90d')}
+                                >
+                                    近90天
+                                </Button>
+                            </div>
+                            <Button icon={<ReloadOutlined />} onClick={fetchDeviceData}>
+                                刷新数据
+                            </Button>
+                        </div>
+
+                        <Spin spinning={dataLoading}>
+                            <Tabs defaultActiveKey="emission">
+                                <TabPane tab="碳排放" key="emission">
+                                    {deviceData.length > 0 ? (
+                                        <ReactECharts option={getEmissionChartOption()} style={{ height: 400 }} />
+                                    ) : (
+                                        <Empty description="暂无碳排放数据" />
+                                    )}
+                                </TabPane>
+                                <TabPane tab="能源消耗" key="energy">
+                                    {deviceData.length > 0 ? (
+                                        <ReactECharts option={getEnergyChartOption()} style={{ height: 400 }} />
+                                    ) : (
+                                        <Empty description="暂无能源消耗数据" />
+                                    )}
+                                </TabPane>
+                                <TabPane tab="运行时间" key="hours">
+                                    {deviceData.length > 0 ? (
+                                        <ReactECharts option={getOperatingHoursChartOption()} style={{ height: 400 }} />
+                                    ) : (
+                                        <Empty description="暂无运行时间数据" />
+                                    )}
+                                </TabPane>
+                            </Tabs>
+                        </Spin>
+                    </Card>
+                </Card>
             </Card>
 
             <Modal
@@ -408,7 +603,9 @@ const DeviceDetail: React.FC = () => {
                     initialValues={device}
                     onSuccess={() => {
                         setIsEditModalVisible(false);
-                        dispatch(fetchDeviceById(deviceId));
+                        if (id) {
+                            dispatch(fetchDeviceById(id));
+                        }
                         message.success('设备更新成功');
                     }}
                     onCancel={() => setIsEditModalVisible(false)}
