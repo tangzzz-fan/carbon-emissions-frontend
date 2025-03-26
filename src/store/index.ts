@@ -4,6 +4,7 @@ import authReducer from './slices/authSlice';
 import emissionReducer from './slices/emissionSlice';
 import predictionReducer from './slices/predictionSlice';
 import userReducer from './slices/userSlice';
+import iotMockReducer from './slices/iotMockSlice';
 
 export const store = configureStore({
     reducer: {
@@ -11,7 +12,8 @@ export const store = configureStore({
         auth: authReducer,
         emissions: emissionReducer,
         predictions: predictionReducer,
-        users: userReducer
+        users: userReducer,
+        iotMock: iotMockReducer
     },
     middleware: (getDefaultMiddleware) =>
         getDefaultMiddleware({

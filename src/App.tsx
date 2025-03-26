@@ -18,6 +18,7 @@ import EmissionList from './features/emissions/pages/EmissionList';
 import EmissionReport from './features/emissions/pages/EmissionReport';
 import PredictionAnalysis from './features/predictions/pages/PredictionAnalysis';
 import UserList from './features/users/pages/UserList';
+import IoTMockDashboard from './features/iot-mock/pages/IoTMockDashboard';
 
 const App: React.FC = () => {
     return (
@@ -36,6 +37,7 @@ const App: React.FC = () => {
                             <Route path="/emissions" element={<EmissionList />} />
                             <Route path="/emissions/report" element={<EmissionReport />} />
                             <Route path="/predictions" element={<PredictionAnalysis />} />
+                            <Route path="/iot-mock" element={<IoTMockDashboard />} />
                         </Route>
                     </Route>
 

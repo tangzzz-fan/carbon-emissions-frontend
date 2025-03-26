@@ -9,7 +9,8 @@ import {
     AppstoreOutlined,
     LineChartOutlined,
     UserOutlined,
-    LogoutOutlined
+    LogoutOutlined,
+    ApiOutlined
 } from '@ant-design/icons';
 import styled from 'styled-components';
 import { useDispatch } from 'react-redux';
@@ -94,6 +95,11 @@ const MainLayout: React.FC = () => {
                             key: '/users',
                             icon: <UserOutlined />,
                             label: '用户管理',
+                        },
+                        {
+                            key: '/iot-mock',
+                            icon: <ApiOutlined />,
+                            label: 'IoT数据管理',
                         },
                     ]}
                 />
