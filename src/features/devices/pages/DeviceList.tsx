@@ -1,9 +1,26 @@
-import React, { useState } from 'react';
-import { Table, Card, Button, Input, Select, Tag, Space, Row, Col, Typography, Spin, Alert, Divider } from 'antd';
+import React, { useEffect, useState } from 'react';
+import { Table, Card, Button, Input, Select, Tag, Space, Row, Col, Typography, Spin, Alert, Divider, Modal, message } from 'antd';
 import { SearchOutlined, ReloadOutlined, FilterOutlined, ClearOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
-import useDevices, { Device } from '../hooks/useDevices';
+import { useSelector } from 'react-redux';
+import { useAppDispatch } from '../../../hooks/reduxHooks';
+import {
+    fetchDevices,
+    fetchDeviceById,
+    setSearchTerm,
+    setFilters,
+    resetFilters,
+    selectFilteredDevices,
+    selectDevicesStatus,
+    selectDevicesError,
+    selectDeviceFilters,
+    selectDeviceSearchTerm,
+    selectSelectedDevice,
+    DeviceFilterOptions
+} from '../../../store/slices/deviceSlice';
+import { Device } from '../../../types/device';
 import { ColumnsType } from 'antd/es/table';
+import DeviceForm from '../components/DeviceForm';
 
 const { Title } = Typography;
 const { Option } = Select;
@@ -40,19 +57,56 @@ const energyTypeOptions = [
 
 const DeviceList: React.FC = () => {
     const navigate = useNavigate();
+    const dispatch = useAppDispatch();
 
-    // 使用设备管理钩子
-    const {
-        devices,
-        loading,
-        error,
-        filters,
-        updateFilters,
-        resetFilters,
-        refreshDevices,
-        searchTerm,
-        setSearch
-    } = useDevices();
+    // 从Redux获取数据
+    const devices = useSelector(selectFilteredDevices);
+    const status = useSelector(selectDevicesStatus);
+    const error = useSelector(selectDevicesError);
+    const filters = useSelector(selectDeviceFilters);
+    const searchTerm = useSelector(selectDeviceSearchTerm);
+    const selectedDevice = useSelector(selectSelectedDevice);
+
+    // 添加编辑模态框状态
+    const [isEditModalVisible, setIsEditModalVisible] = useState(false);
+    const [editingDeviceId, setEditingDeviceId] = useState<string | null>(null);
+
+    const loading = status === 'loading';
+
+    // 初始化加载设备列表
+    useEffect(() => {
+        dispatch(fetchDevices());
+    }, [dispatch]);
+
+    // 当编辑设备ID变化时，获取设备详情
+    useEffect(() => {
+        if (editingDeviceId) {
+            dispatch(fetchDeviceById(editingDeviceId));
+        }
+    }, [editingDeviceId, dispatch]);
+
+    // 处理编辑按钮点击
+    const handleEdit = (deviceId: string) => {
+        setEditingDeviceId(deviceId);
+        dispatch(fetchDeviceById(deviceId)).then(() => {
+            setIsEditModalVisible(true);
+        });
+    };
+
+    // 编辑成功后的处理
+    const handleEditSuccess = () => {
+        setIsEditModalVisible(false);
+        setEditingDeviceId(null);
+        // 刷新设备列表
+        dispatch(fetchDevices());
+        message.success('设备更新成功');
+    };
+
+    // 关闭编辑模态框
+    const handleEditCancel = () => {
+        setIsEditModalVisible(false);
+        setEditingDeviceId(null);
+    };
 
     // 获取设备类型对应的标签颜色
     const getTypeColor = (type: string) => {
@@ -148,25 +202,35 @@ const DeviceList: React.FC = () => {
             render: (_: any, record: Device) => (
                 <Space size="middle">
                     <a onClick={() => navigate(`/devices/${record.id}`)}>详情</a>
-                    <a onClick={() => navigate(`/devices/edit/${record.id}`)}>编辑</a>
+                    <a onClick={() => handleEdit(record.id)}>编辑</a>
                 </Space>
             ),
         },
     ];
 
-    // 处理搜索
-    const handleSearch = (value: string) => {
-        setSearch(value);
+    // 过滤和搜索处理函数
+    const handleTypeChange = (value: string | undefined) => {
+        dispatch(setFilters({ ...filters, type: value }));
     };
 
-    // 处理类型过滤
-    const handleTypeChange = (value: string) => {
-        updateFilters({ type: value });
+    const handleStatusChange = (value: string | undefined) => {
+        dispatch(setFilters({ ...filters, status: value }));
     };
 
-    // 处理状态过滤
-    const handleStatusChange = (value: string) => {
-        updateFilters({ status: value });
+    const handleLocationChange = (value: string | undefined) => {
+        dispatch(setFilters({ ...filters, location: value }));
+    };
+
+    const handleSearchChange = (value: string) => {
+        dispatch(setSearchTerm(value));
+    };
+
+    const handleResetFilters = () => {
+        dispatch(resetFilters());
+    };
+
+    const handleRefresh = () => {
+        dispatch(fetchDevices());
     };
 
     return (
@@ -177,7 +241,7 @@ const DeviceList: React.FC = () => {
                     <Button
                         type="primary"
                         icon={<ReloadOutlined />}
-                        onClick={refreshDevices}
+                        onClick={handleRefresh}
                         loading={loading}
                     >
                         刷新
@@ -204,9 +268,8 @@ const DeviceList: React.FC = () => {
                             placeholder="搜索设备名称或ID"
                             allowClear
                             enterButton={<SearchOutlined />}
-                            onSearch={handleSearch}
+                            onSearch={handleSearchChange}
                             value={searchTerm}
-                            onChange={(e) => setSearch(e.target.value)}
                         />
                     </Col>
                     <Col span={4}>
@@ -238,7 +301,7 @@ const DeviceList: React.FC = () => {
                     <Col span={4}>
                         <Button
                             icon={<ClearOutlined />}
-                            onClick={resetFilters}
+                            onClick={handleResetFilters}
                             disabled={Object.keys(filters).length === 0 && !searchTerm}
                         >
                             重置筛选
@@ -282,6 +345,24 @@ const DeviceList: React.FC = () => {
                     locale={{ emptyText: '暂无设备数据' }}
                 />
             </Spin>
+
+            {/* 添加编辑模态框 */}
+            <Modal
+                title="编辑设备"
+                visible={isEditModalVisible}
+                onCancel={handleEditCancel}
+                footer={null}
+                destroyOnClose
+                width={700}
+            >
+                {selectedDevice && (
+                    <DeviceForm
+                        initialValues={selectedDevice}
+                        onSuccess={handleEditSuccess}
+                        onCancel={handleEditCancel}
+                    />
+                )}
+            </Modal>
         </Card>
     );
 };

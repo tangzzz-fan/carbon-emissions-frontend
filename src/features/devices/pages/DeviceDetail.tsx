@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import { useAppDispatch } from '../../../hooks/reduxHooks';
 import {
@@ -36,8 +36,6 @@ import {
 } from '../../../store/slices/deviceSlice';
 import DeviceForm from '../components/DeviceForm';
 import ReactECharts from 'echarts-for-react';
-import * as deviceService from '../../../services/device.service';
-import { Device } from '../hooks/useDevices';
 
 const { TabPane } = Tabs;
 const { confirm } = Modal;
@@ -108,6 +106,7 @@ const getStatusColor = (status: string) => {
 
 const DeviceDetail: React.FC = () => {
     const { id } = useParams<{ id: string }>();
+    const location = useLocation();
     const navigate = useNavigate();
     const dispatch = useAppDispatch();
 
@@ -127,6 +126,16 @@ const DeviceDetail: React.FC = () => {
     console.log('Redux设备状态:', status);
     console.log('Redux设备数据:', device);
     console.log('Redux错误信息:', reduxError);
+
+    // 通过URL查询参数检测是否需要自动打开编辑模态框
+    useEffect(() => {
+        const searchParams = new URLSearchParams(location.search);
+        if (searchParams.get('edit') === 'true') {
+            setIsEditModalVisible(true);
+            // 移除查询参数，避免刷新页面后再次打开模态框
+            navigate(`/devices/${id}`, { replace: true });
+        }
+    }, [location, id, navigate]);
 
     // 获取设备详情 - 只使用Redux方式，移除本地fetchDeviceDetail
     useEffect(() => {
